@@ -1,0 +1,221 @@
+#include <SPI.h>
+#include <WiFiNINA.h>
+#include <LiquidCrystal.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
+#include <dht.h>
+#define A0
+#define ONE_WIRE_BUS 6
+#define dht_apin A1 // Analog Pin sensor is connected to dht DHT;
+// initialize the library with the numbers of the interface pins
+LiquidCrystal lcd(12, 11, 5, 4, 3, 2);
+// Setup a oneWire instance to communicate with any OneWire devices 
+OneWire oneWire(ONE_WIRE_BUS);
+// Pass our oneWire reference to Dallas Temperature sensor 
+DallasTemperature sensors(&oneWire);
+char ssid[] = "hello"; // your network SSID (name)
+char pass[] = "123456789"; // your network password
+int keyIndex = 0; // your network key Index number (needed only for WEP)
+
+int status = WL_IDLE_STATUS;
+WiFiServer server(80);
+void setup() {
+ // set up the LCD's number of columns and rows:
+ lcd.begin(16, 2);
+ //Initialize serial and wait for port to open:
+ Serial.begin (9600); 
+
+ // attempt to connect to Wifi network:
+ while ( status != WL_CONNECTED) {
+ Serial.print("Attempting to connect to SSID: ");
+ Serial.println(ssid);
+ // Connect to WPA/WPA2 network. Change this line if using open or
+WEP network:
+ status = WiFi.begin(ssid, pass);
+ // wait 10 seconds for connection:
+ delay(10000);
+ }
+ server.begin();
+ // you're connected now, so print out the status:
+ Serial.print("SSID: ");
+ Serial.println(WiFi.SSID());
+ IPAddress ip = WiFi.localIP();
+ Serial.print("IP Address: ");
+ Serial.println(ip);
+}
+void loop() {
+ WiFiClient client = server.available();
+ lcd.clear();
+ lcd.setCursor(0, 0);
+ lcd.print("NAMASKARAM!");
+ // set the cursor to column 0, line 1
+ // (note: line 1 is the second row, since counting begins with 0):
+ lcd.setCursor(0, 1);
+ // print the number of seconds since reset:
+ lcd.print("Smart checker");
+ if (client) {
+ Serial.println("new client");
+ // an http request en ds with a blank line
+ boolean currentLineIsBlank = true;
+ while (client.connected()) {
+ if (client.available()) {
+ char c = client.read();
+ Serial.write(c);
+ // if you've gotten to the end of the line (received a newline
+ // character) and the line is blank, the http request has ended,
+ // so you can send a reply
+ if (c == '\n' && currentLineIsBlank) {
+ // send a standard http response header
+ client.println("HTTP/1.1 200 OK");
+ client.println("Content-Type: text/html");
+ client.println("Connection: close"); // the connection will be closed
+after completion of the response
+ client.println("Refresh: 5"); // refresh the page automatically every 5
+sec
+ client.println();
+ client.println("<!DOCTYPE HTML>");
+ client.println("<html>");
+ client.println("<head><title>Smart Water Quality Checker</title>");
+ client.println("<style>");
+ client.println("#main{box-shadow: 0 10px 18px 0
+rgba(0,10,1.4);width:300px;margin: 20px;text-align: center; padding: 4px;
+font-family:Timesnewroman;background: #33cc33;}");
+ client.println("#main1{box-shadow: 0 10px 18px 0
+rgba(0,10,1.4);width:300px;margin: 20px;text-align: center; padding: 4px;
+font-family:Timesnewroman;background: #ff3300;}");
+ client.println("h1 {margin: auto; text-align: left; text-transform:
+uppercase; color: black;}");
+ client.println("</style>");
+ client.println("</head>");
+ client.println("<body style='background-color:#C0C0C0'>");
+ client.println("<div> <h1> Smart Water Quality Checker </h1>
+</div>");
+ sensors.requestTemperatures();
+ Serial.print("Temperature: " + String(sensors.getTempCByIndex(0))
++ " C and" + String(sensors.getTempFByIndex(0))+ " F");
+ client.println("<div id='main'>");
+ client.println("Temperature : ");
+ client.print(sensors.getTempCByIndex(0));
+ client.print(" C or ");
+ client.print(sensors.getTempFByIndex(0));
+ client.print(" F");
+ client.println("</div>");
+ Serial.print(" - Fahrenheit temperature: ");
+ Serial.println(sensors.getTempFByIndex(0));
+ if (sensors.getTempCByIndex(0) <= 10){
+ client.println("<div id='main1'>");
+ client.println("Water is too cool");
+ client.println("</div>");
+ }
+ if (sensors.getTempCByIndex(0) > 50){
+ client.println("<div id='main1'>");
+ client.println("Water is too hot");
+ client.println("</div>");
+ }
+ client.println("<div id='main'>");
+ int sensorReading = analogRead(0);
+ float voltage = sensorReading * (5.0 / 1024.0);
+ client.println("Turbidity voltage : ");
+ client.print(voltage);
+ if (voltage > 4.10){
+ client.print(" , Clear water");
+ client.println("</div>");
+ }
+ else{
+ client.print(" , Not Clear water");
+ client.println("</div>");
+ client.println("<div id='main1'>");
+ client.println("Not clear water");
+ client.println("</div>");
+ }
+ DHT.read11(dht_apin);
+ client.println("<div id='main'>");
+ client.println("Current humidity = ");
+ client.print(DHT.humidity);
+ client.print(" %");
+ client.println("</div>");
+ int value = analogRead(A2);
+ client.println("<div id='main'>");
+ client.println("Water level: ");
+ if (value > 650) {
+ client.println("High");
+ client.println("</div>");
+ client.println("<div id='main1'>");
+ client.println("Water level is high");
+ client.println("</div>");
+ }
+ else if ((value > 550) && (value <= 650)) {
+ client.println("Medium");
+ client.println("</div>");
+ }
+ else{
+ client.println("Low");
+ client.println("</div>");
+ }
+ client.println("</body>");
+ client.println("</html>");
+ break;
+ }
+ if (c == '\n') {
+ // you're starting a new line
+ currentLineIsBlank = true;
+ }
+ else if (c != '\r') {
+ // you've gotten a character on the current line
+ currentLineIsBlank = false;
+ }
+ }
+ }
+ delay(1200);
+ lcd.clear();
+ lcd.setCursor(0, 0);
+ lcd.print("Temperature:");
+ lcd.setCursor(0, 1);
+ lcd.print(sensors.getTempCByIndex(0));
+ lcd.print(" C");
+ delay(1200);
+ int sensorReading = analogRead(0);
+ float voltage = sensorReading * (5.0 / 1024.0);
+ lcd.clear();
+ lcd.setCursor(0, 0);
+ lcd.print("Turbdity:");
+ if (voltage > 4.10){
+ lcd.setCursor(0, 1);
+ lcd.print("Clear water");
+ }
+ else{
+ lcd.setCursor(0, 1);
+ lcd.print("Not clear water");
+ }
+ delay(1200);
+ DHT.read11(dht_apin);
+ lcd.clear();
+ lcd.setCursor(0, 0);
+ lcd.print("Current humidity = ");
+ lcd.setCursor(0, 1);
+ lcd.print(DHT.humidity);
+ lcd.print("% ");
+ delay(1200);
+ int value = analogRead(A2);
+ Serial.println(value);
+ lcd.clear();
+ lcd.setCursor(0, 0);
+ lcd.print("Water level: ");
+ lcd.setCursor(0, 1);
+ if (value > 680) {
+ lcd.print("High ");
+ }
+ else if ((value > 550) && (value <= 680)) {
+ lcd.print("Medium ");
+ }
+ else{
+ lcd.println("Low ");
+ }
+ }
+ // give the web browser time to receive the data
+ delay(1000);
+
+ // close the connection:
+ client.stop();
+ Serial.println("client disconnected");
+ }
